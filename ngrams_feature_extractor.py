@@ -14,8 +14,10 @@ import string
 
 csv.field_size_limit(sys.maxsize)
 class NGramsFeatureExtractor():
-
-	def removeNonAscii(text):
+	def removeURLs(self, text):
+		text = re.sub(r'^https?:\/\/.*[\r\n]*', ' ', text, flags=re.MULTILINE)
+		return text
+	def removeNonAscii(self, text):
 		text.replace('"', "")
 
 		text = ''.join([i if ord(i) < 128 else '' for i in text])
@@ -27,19 +29,20 @@ class NGramsFeatureExtractor():
 
 		return text
 
-	def removePunctuation(text):
+	def removePunctuation(self, text):
 		finalText = re.sub('\<.+\>', '', text)
 		finalText.replace("\n", "")
 		finalText.replace("\r", "")
 		finalText.replace("\t", "")
 		finalText = finalText.lower()
+		return finalText
 
 
-	def __init__(self, csvFileName, csvFileName2):
-		self.csvFileName = csvFileName;
-		self.csvFileName2 = csvFileName2;
+	def __init__(self, csvFileName):
+		self.inputFileName = csvFileName;
+		#self.outputFileName = csvFileName2;
 
-	def extractData(self, labelCol, csvFileName = None, outputFileName = None, outputFileName2 = None):
+	def extractData(self, labelCol, csvFileName = None, outputFileName = None):
 		labels = list()
 		features = list()
 		testFeatures = list()
@@ -51,11 +54,14 @@ class NGramsFeatureExtractor():
 		testPrintingRawTexts = list()
 
 
-		with open(self.csvFileName) as csvfile:
+		with open(self.inputFileName) as csvfile:
 			reader = csv.reader(csvfile)
 			first = True
+			amit = 0
 			for row in reader:
-
+				amit += 1
+				
+				print (row)
 				#below is if there is a header column
 				'''if(first):
 					first = False
@@ -64,32 +70,42 @@ class NGramsFeatureExtractor():
 					continue'''
 
 				#starting from 1 because of id column (may not apply here)
-				newFeature = row[1:labelCol-1]
+
+				if len(row) < 3:
+					continue
+				newFeature = row[1:labelCol]
 				
-				text = row[labelCol-1]
+				text = row[labelCol]
 				
-				text = removeNonAscii(text)
+				text = self.removeURLs(text)
+
+				text = self.removeNonAscii(text)
+
 
 				trainPrintingRawTexts.append(text)
 
 				
-				textNoPunctuation = removePunctuation(text)
-				trainRawTexts.append(textNoPunctuation)
+				textNoPunctuation = self.removePunctuation(text)
+				if textNoPunctuation is not None:
+					trainRawTexts.append(textNoPunctuation)
+				features.append(row)
 		
 
 		
 
-		with open(self.csvFileName2) as csvfile:
+		'''with open(self.csvFileName2) as csvfile:
 			reader = csv.reader(csvfile)
 			first = True
 			for row in reader:
 
 				#below is if there is a header column
-				'''if(first):
-					first = False
-					continue
-				if len(row) <= 1:
-					continue'''
+				#if(first):
+				#	first = False
+				#	continue
+				#if len(row) <= 1:
+				#	continue
+				
+				#the one gets rid of ID column
 				newFeature = row[1:labelCol-1]
 				
 				
@@ -103,45 +119,35 @@ class NGramsFeatureExtractor():
 
 				testRawTexts.append(textNoPunctuation) #happens to be the raw text column
 
-				testFeatures.append(newFeature)	
+				testFeatures.append(newFeature)'''	
 
 
-		tfidf = TfidfVectorizer(min_df = 0.1, max_df = 0.9, ngram_range = (2, 4), sublinear_tf = False)
+		tfidf = TfidfVectorizer(min_df = 0.01, max_df = 0.99, ngram_range = (1, 4), sublinear_tf = False)
 
 		extraFeatures = tfidf.fit_transform(trainRawTexts)
 
-		print (tfidf.get_feature_names())
+		
 
 		ngramFeatureNames = list()
 		newFeatureNames = tfidf.get_feature_names()
+		print (newFeatureNames)
+		ngramsextracted = open("ngramsextracted.txt", 'w');
 		for i in range(len(newFeatureNames)):
 			ngramFeatureNames.append("frequency: " + str(newFeatureNames[i]))
+			ngramsextracted.write(str(newFeatureNames[i]) + "\n")
 			#print (str(i) + ": " + ngramFeatureNames[i])
-
-		densed = extraFeatures.todense()
+		ngramsextracted.close()
+		'''densed = extraFeatures.todense()
 
 		counter = 0
 		for newFeature in densed:
 			toAdd = np.array(newFeature)[0].tolist()
-			if(counter < trainLength):
-				print ("adding to train: " + str(counter))
-				features[counter].extend(toAdd)
-			else:
-				print ("HORRIBLE ERROR")
+			print ("adding to train: " + str(counter))
+			features[counter].extend(toAdd)
 			counter += 1
 
-		extraTestFeatures = tfidf.transform(testRawTexts)
 
-		testDensed = extraTestFeatures.todense()
 
-		counter = 0
-		for newFeature in testDensed:
-			toAdd = np.array(newFeature)[0].tolist()
-			print ("adding to test:")
-			testFeatures[counter].extend(toAdd)
-			counter += 1
-
-		print (len(features[0]))
 
 
 		labels = np.asarray(labels)
@@ -153,6 +159,7 @@ class NGramsFeatureExtractor():
 		print(features)
 		print ("--------------------Features Printed-----------------------")
 
+		origFeaturesHeader = "ID,Text,"
 		totalFeaturesHeader = origFeaturesHeader
 		for i in range(len(ngramFeatureNames)):
 			if i < len(ngramFeatureNames) - 1:
@@ -168,16 +175,12 @@ class NGramsFeatureExtractor():
 				f.write(str(features[i][j]) + ",")
 			f.write("\"" + trainPrintingRawTexts[i] + "\"" + ",")
 			f.write("\n")
-
-		f = open(outputFileName2, 'w')
-		f.write(totalFeaturesHeader + ",text\n")
-		for i in range(len(testFeatures)):
-			f.write(str(i) + ",")
-			for j in range(0, len(testFeatures[i])):
-				f.write(str(testFeatures[i][j]) + ",")
-			f.write("\"" + testPrintingRawTexts[i] + "\"")
-			f.write("\n")
+'''
 
 
-extraFeatureExtractor = NGramsFeatureExtractor("training_dataset.csv", "test_dataset.csv");
-extraFeatureExtractor.extractData(labelCol = 28, outputFileName = "extra_training_dataset.csv", outputFileName2 = "extra_test_dataset.csv")
+extraFeatureExtractor = NGramsFeatureExtractor("labeled_prelim.csv");
+extraFeatureExtractor.extractData(labelCol = 1, outputFileName = "labeled_prelim_with_ngrams.csv")
+
+
+
+
