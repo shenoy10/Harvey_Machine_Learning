@@ -28,18 +28,30 @@ def create_symspell(max_edit_distance, prefix_length, freq_file_path):
     return sym_spell
 
 
-def process_tweet(tweet, tknzr, sym_spell=None):
+def is_valid_token(w):
+    special = ['<url>','<hashtag>', '<number>', '<user>']
+    return w.isalpha() or w in special
+
+
+def process_tweet(tweet, tknzr, sym_spell=None, advanced=False):
     st_1 = []
     for w in tknzr.tokenize(tweet):
         #remove retweet annotation if present:
         if w == 'RT':
-            continue
+            if advanced:
+                st_1.append('rt')
+        elif w[0] == '@':
+            if advanced:
+                st_1.append('<user>')
         #remove hashtag symbol
         elif w[0] == '#':
             st_1.append(w[1:])
         #replace link with LINK keyword
         elif w[:4] == 'http':
-            st_1.append('link')
+            st_1.append('<url>')
+        elif w.isnumeric():
+            if advanced:
+                st_1.append('<number>')
         else:
             st_1.append(w)
     
@@ -49,6 +61,9 @@ def process_tweet(tweet, tknzr, sym_spell=None):
     if sym_spell != None:
         st_2 = [sym_spell.word_segmentation(w.lower()).corrected_string 
                 for w in st_1 if w.isalpha() and not w.lower() in stop_words]
+    elif advanced:
+        st_2 = [w.lower() for w in st_1 if 
+                not w.lower() in stop_words]
     else:
         st_2 = [w.lower() for w in st_1 if w.isalpha() and 
                 not w.lower() in stop_words]
@@ -59,4 +74,3 @@ def process_tweet(tweet, tknzr, sym_spell=None):
     
     #now do word segmentation/spell check
     return ' '.join(st_3)
-
