@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from pprint import pprint
 
 import gensim
 from gensim.utils import simple_preprocess
@@ -15,7 +14,6 @@ stop_words = set(stopwords.words('english'))
 from symspellpy.symspellpy import SymSpell, Verbosity
 from sklearn.model_selection import train_test_split
 
-
 #create spell checker/word splitter
 def create_symspell(max_edit_distance, prefix_length, freq_file_path):
     # create object
@@ -27,13 +25,11 @@ def create_symspell(max_edit_distance, prefix_length, freq_file_path):
         return None
     return sym_spell
 
-
 def is_valid_token(w):
-    special = ['<url>','<hashtag>', '<number>', '<user>']
+    special = ['<url>','<number>', '<user>']
     return w.isalpha() or w in special
 
-
-def process_tweet(tweet, tknzr, sym_spell=None, advanced=False):
+def process_tweet(tweet, idxr, tknzr, sym_spell=None, advanced=False):
     st_1 = []
     for w in tknzr.tokenize(tweet):
         #remove retweet annotation if present:
@@ -52,20 +48,21 @@ def process_tweet(tweet, tknzr, sym_spell=None, advanced=False):
         elif w.isnumeric():
             if advanced:
                 st_1.append('<number>')
+        elif w not in idxr and sym_spell != None:
+            split = sym_spell.word_segmentation(w.lower()).corrected_string
+            for w_seg in tknzr.tokenize(split):
+                st_1.append(w_seg)
         else:
             st_1.append(w)
     
     st_2 = []
     
     #remove stop words and punctuation, make everything lowercase
-    if sym_spell != None:
-        st_2 = [sym_spell.word_segmentation(w.lower()).corrected_string 
-                for w in st_1 if w.isalpha() and not w.lower() in stop_words]
-    elif advanced:
-        st_2 = [w.lower() for w in st_1 if 
-                not w.lower() in stop_words]
+    if advanced:
+        st_2 = [w for w in st_1 if is_valid_token(w) and 
+                    not w.lower() in stop_words]
     else:
-        st_2 = [w.lower() for w in st_1 if w.isalpha() and 
+        st_2 = [w for w in st_1 if w.isalpha() and
                 not w.lower() in stop_words]
     
     #lemmatization (converts all words to root form for standardization)
